@@ -2,7 +2,7 @@ import datetime
 
 
 class SprintInfo:
-    def __init__(self, values: {}):
+    def __init__(self, values: dict):
         if "Next" in values["name"]:
             self.sprint_name = values["name"][9:-1]
             self.in_next_pi = True

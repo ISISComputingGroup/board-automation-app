@@ -2,16 +2,14 @@ import configparser
 import json
 import os
 from datetime import datetime
-from graph_ql_interactions.github_request_functions import (
-    get_content,
-    open_graph_ql_query_file,
-    run_query,
-)
+
+from graph_ql_interactions.github_request_functions import get_contents_of_file_in_repo
 
 import graph_ql_interactions.card_interactions as card_i
+import graph_ql_interactions.repo_interactions as repo_i
 
 config = configparser.ConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), "..", "config_info", "config.ini"))
+config.read(os.path.join(f"{os.path.dirname(__file__)}", "..", "config_info", "config.ini"))
 
 
 class BoardChecks:
@@ -41,19 +39,20 @@ class BoardChecks:
             if card.type != "ISSUE":
                 # Not checking on PRs
                 continue
-            if card.repo != config["BOARD.CHECKS"]["release_notes_repo"]:
-                # Limiting the repo to begin with to those in the release notes being considered
-                continue
             if card.status is None:
                 # If there is no status it is not properly in the system
                 continue
             if card.sprint is None:
                 # If it has no sprint there is no scheduling aspect so will not check
                 continue
-            self.verify_card_pointing_correct(card)
             self.check_if_stale(card)
             self.check_assignees(card)
-            self.check_release_notes(card)
+            if card.repo == config["BOARD.CHECKS"]["release_notes_repo"]:
+                # Limiting the repo to begin with to those in the release notes being considered
+                self.check_release_notes(card)
+            if config["BOARD.CHECKS"]["check_points_labels"] == "True":
+                self.verify_card_pointing_correct(card)
+            self.check_statuses_and_labels_match(card)
         self.last_update = datetime.now()
         self.summary["total_num"] = self.error_count + self.warning_count
         self.summary["error_num"] = self.error_count
@@ -70,15 +69,15 @@ class BoardChecks:
             return
         points_label_count = 0
         zero_point_label = False
-        problem_text = None
+        new_problem_text = None
         for label in card.labels:
             if label.isdigit():
                 points_label_count += 1
             if label == "0":
                 zero_point_label = True
         if points_label_count > 1:
-            problem_text = (
-                f"ERROR: Issue {card.number} in {card.repo} assigned to "
+            new_problem_text = (
+                f"ERROR: Issue {card.title} in {card.repo} assigned to "
                 f"{card.assignees} has multiple points labels"
             )
             self.error_count += 1
@@ -86,8 +85,8 @@ class BoardChecks:
             if not list(
                 set(card.labels) & set(config["BOARD.CHECKS"]["zero_points_labels"].split(","))
             ):
-                problem_text = (
-                    f"ERROR: Issue {card.number} in {card.repo} assigned to {card.assignees} has "
+                new_problem_text = (
+                    f"ERROR: Issue {card.title} in {card.repo} assigned to {card.assignees} has "
                     f"a zero-point label and nothing to indicate this is valid"
                 )
                 self.error_count += 1
@@ -95,19 +94,19 @@ class BoardChecks:
             if not list(
                 set(card.labels) & set(config["BOARD.CHECKS"]["no_points_labels"].split(","))
             ):
-                problem_text = (
-                    f"ERROR: Issue {card.number} in {card.repo} assigned to {card.assignees} has "
+                new_problem_text = (
+                    f"ERROR: Issue {card.title} in {card.repo} assigned to {card.assignees} has "
                     f"no points labels and it should have"
                 )
                 self.error_count += 1
-        if problem_text:
-            self.problem_text.append(problem_text)
+        if new_problem_text:
+            self.problem_text.append(new_problem_text)
 
     def check_assignees(self, card):
         if card.status not in config["BOARD.CHECKS"]["allow_unassigned"].split(","):
             if not card_i.get_assignees(card.id):
                 self.problem_text.append(
-                    f"ERROR: Issue {card.number} in {card.repo} with {card.status} status does not "
+                    f"ERROR: Issue {card.title} in {card.repo} with {card.status} status does not "
                     f"have anyone assigned."
                 )
                 self.error_count += 1
@@ -123,52 +122,114 @@ class BoardChecks:
         label_errors = dict(
             item.split(":") for item in config["BOARD.CHECKS"]["label_errors"].split(",")
         )
-        if card.status in comment_errors.keys():
-            self.check_if_last_comment_stale(
-                comment_errors[card.status], card.id, card.number, card.status, card.assignees
-            )
-        elif card.status in label_errors.keys() or card.status in label_warnings.keys():
-            self.check_if_label_status_stale(
-                label_warnings, label_errors, card.id, card.number, card.assignees
-            )
+        comment_check = {k: comment_errors[k] for k in (comment_errors.keys() & card.labels)}
+        error_check = {k: label_errors[k] for k in (label_errors.keys() & card.labels)}
+        warning_check = {k: label_warnings[k] for k in (label_warnings.keys() & card.labels)}
 
-    def check_if_last_comment_stale(self, duration, ident, number, status, assignees):
+        if comment_check:
+            for check in comment_check:
+                if self.check_if_last_comment_stale(
+                    comment_errors[check], card.id, card.title, card.status, card.assignees
+                ):
+                    self.error_count += 1
+                    return
+                else:
+                    try:
+                        label_errors.pop(check)
+                        label_warnings.pop(check)
+                    except KeyError:
+                        # There is no guarantee that this will be available in other areas
+                        pass
+        else:
+            if card.status.lower() in comment_errors.keys():
+                if self.check_if_last_comment_stale(
+                    comment_errors[card.status.lower()],
+                    card.id,
+                    card.title,
+                    card.status,
+                    card.assignees,
+                ):
+                    self.error_count += 1
+                    return
+                else:
+                    try:
+                        label_errors.pop(card.status.lower())
+                        label_warnings.pop(card.status.lower())
+                    except KeyError:
+                        # There is no guarantee that this will be available in other areas
+                        pass
+
+        start_error_count = self.error_count
+        if error_check:
+            if self.check_if_label_status_stale(
+                "ERROR",
+                label_errors,
+                card.id,
+                card.title,
+                card.assignees,
+            ):
+                self.error_count += 1
+                return
+        else:
+            if card.status.lower() in label_errors.keys():
+                if self.check_stale_status(
+                    card.id, card.status, label_errors, "ERROR", card.number, card.assignees
+                ):
+                    self.error_count += 1
+                    return
+
+        # If the error count is the same, then there is no need to check for warning as an error
+        # has been found
+        if self.error_count == start_error_count:
+            if warning_check:
+                if self.check_if_label_status_stale(
+                    "Warning",
+                    label_warnings,
+                    card.id,
+                    card.title,
+                    card.assignees,
+                ):
+                    self.warning_count += 1
+                    return
+            else:
+                if card.status.lower() in label_warnings.keys():
+                    if self.check_stale_status(
+                        card.id, card.status, label_warnings, "Warning", card.title, card.assignees
+                    ):
+                        self.error_count += 1
+                        return
+
+    def check_if_last_comment_stale(self, duration, ident, title, status, assignees):
         last_comment = datetime.strptime(
             card_i.get_when_last_commented_created_on_issue(ident), "%Y-%m-%dT%H:%M:%SZ"
         )
         today_to_compare = datetime.today()
         if (today_to_compare - last_comment).days >= int(duration):
             self.problem_text.append(
-                f"ERROR: Issue {number} in {status} assigned to {assignees} last had a comment "
-                f"added 28 days or more ago."
+                f"ERROR: Issue {title} in {status} assigned to {assignees} last had a comment "
+                f"added {duration} days or more ago."
             )
-            self.error_count += 1
+            return True
+        return False
 
-    def check_if_label_status_stale(self, warning_list, error_list, ident, number, assignees):
+    def check_if_label_status_stale(self, status, label_list, ident, title, assignees):
         labels = card_i.get_when_labels_were_added_to_issue(ident)
         today_for_labels = datetime.today()
-        for label in labels:
-            label_in_place_since = (
-                today_for_labels - datetime.strptime(labels[label], "%Y-%m-%dT%H:%M:%SZ")
-            ).days
-            if label in error_list:
-                if label_in_place_since >= int(error_list[label]):
+        for check in label_list:
+            if check in labels:
+                label_in_place_since = (
+                    today_for_labels - datetime.strptime(labels[check], "%Y-%m-%dT%H:%M:%SZ")
+                ).days
+                if label_in_place_since >= int(label_list[check]):
                     self.problem_text.append(
-                        f"ERROR: Issue {number} assigned to {assignees} had {label} label added "
-                        f"more than {int(error_list[label])} days ago."
+                        f"{status}: Issue {title} assigned to {assignees} had {check} label added "
+                        f"more than {int(label_list[check])} days ago."
                     )
-                    self.error_count += 1
-                    return
-                if label_in_place_since >= int(warning_list[label]):
-                    self.problem_text.append(
-                        f"WARNING: Issue {number} assigned to {assignees} had {label} label added"
-                        f" more than {int(warning_list[label])} days ago."
-                    )
-                    self.warning_count += 1
-                    return
+                    return True
+        return False
 
     def get_present_release_notes(self):
-        self.release_notes = get_content(
+        self.release_notes = get_contents_of_file_in_repo(
             repo_owner=config["GITHUB.INTERACTION"]["org_name"],
             repo_name=config["BOARD.CHECKS"]["release_notes_repo"],
             file_path=config["BOARD.CHECKS"]["release_notes_file_path"],
@@ -176,13 +237,11 @@ class BoardChecks:
         )
 
     def get_release_note_prs(self):
-        repos_query = open_graph_ql_query_file("findOpenPullRequestsInRepo.txt")
-        result = run_query(
-            repos_query.replace("<ORG_NAME>", config["GITHUB.INTERACTION"]["org_name"]).replace(
-                "<REPO>", config["BOARD.CHECKS"]["release_notes_repo"]
-            )
+        result = repo_i.get_pull_requests(
+            org_name=config["GITHUB.INTERACTION"]["org_name"],
+            repo_name=config["BOARD.CHECKS"]["release_notes_repo"],
         )
-        for value in result["data"]["repository"]["pullRequests"]["nodes"]:
+        for value in result:
             self.prs[value["title"]] = value["bodyText"]
 
     def check_release_notes(self, card):
@@ -200,14 +259,14 @@ class BoardChecks:
                 # Hard coding as this is complicated, and want to have something that works ASAP
                 if card_in_release_notes and card_in_prs:
                     self.problem_text.append(
-                        f"ERROR: Issue {card.number} assigned to {card.assignees} is {card.status} "
+                        f"ERROR: Issue {card.title} assigned to {card.assignees} is {card.status} "
                         f"and has both release notes and open PRs."
                     )
                     self.error_count += 1
                     return
                 if not card_in_release_notes and not card_in_prs:
                     self.problem_text.append(
-                        f"ERROR: Issue {card.number} assigned to {card.assignees} is {card.status} "
+                        f"ERROR: Issue {card.title} assigned to {card.assignees} is {card.status} "
                         f"and has no release notes or PRs for release notes."
                     )
                     self.error_count += 1
@@ -215,7 +274,7 @@ class BoardChecks:
                 if card.status == "Done":
                     if not card_in_release_notes and card_in_prs:
                         self.problem_text.append(
-                            f"ERROR: Issue {card.number} assigned to {card.assignees} is "
+                            f"ERROR: Issue {card.title} assigned to {card.assignees} is "
                             f"{card.status} and has open PRs for release notes."
                         )
                         self.error_count += 1
@@ -223,8 +282,33 @@ class BoardChecks:
                 if card.status == "Review":
                     if card_in_release_notes and not card_in_prs:
                         self.problem_text.append(
-                            f"ERROR: Issue {card.number} assigned to {card.assignees} is "
+                            f"ERROR: Issue {card.title} assigned to {card.assignees} is "
                             f"{card.status} and has an entry in the release notes without being "
                             f"completed."
                         )
                         self.error_count += 1
+
+    def check_stale_status(self, ident, status, label_list, message_status, title, assignees):
+        today_for_status = datetime.today()
+        status_changed_date = card_i.get_when_specified_project_field_was_last_changed(
+            ident, status
+        )
+        status_in_place_since = (today_for_status - status_changed_date).days
+        if status_in_place_since >= int(label_list[status.lower()]):
+            self.problem_text.append(
+                f"{message_status}: Issue {title} assigned to {assignees} had {status} assigned "
+                f"more than {int(label_list[status.lower()])} days ago."
+            )
+            return True
+        return False
+
+    def check_statuses_and_labels_match(self, card):
+        if (card.status.lower() not in card.labels) and (
+            card.status.lower() not in ["done", "backlog"]
+        ):
+            self.problem_text.append(
+                f"Error: Issue {card.title} does not have a suitable label to match the current "
+                f"status of {card.status}"
+            )
+            return True
+        return False

@@ -1,5 +1,5 @@
 class CardInfo:
-    def __init__(self, card: {}):
+    def __init__(self, card):
         self.node_id = card["id"]
         self.type = card["type"]
         try:
@@ -12,9 +12,11 @@ class CardInfo:
             case "DRAFT_ISSUE":
                 self.number = card["content"]["title"]
                 self.repo = "draft"
+                self.title = f"DRAFT - {card['content']['title']}"
             case "ISSUE":
                 self.number = card["content"]["number"]
                 self.repo = card["content"]["repository"]["name"]
+                self.title = f"{card['content']['number']} - {card['content']['title']}"
                 try:
                     for label in card["content"]["labels"]["nodes"]:
                         self.labels.append(label["name"])
@@ -33,9 +35,11 @@ class CardInfo:
                 # These are not handled yet
                 self.number = None
                 self.repo = None
+                self.title = "Pull Request"
             case _:
                 self.number = None
                 self.repo = None
+                self.title = "Unknown"
         self.name = str(self.number)
         field_values = card["fieldValues"]["nodes"]
         self.status = None

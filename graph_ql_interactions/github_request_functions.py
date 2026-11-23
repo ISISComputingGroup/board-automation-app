@@ -4,14 +4,14 @@ import requests
 import configparser
 
 config = configparser.ConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), "..", "config_info", "config.ini"))
+config.read(os.path.join(f"{os.path.dirname(__file__)}", "..", "config_info", "config.ini"))
 token = config["GITHUB.INTERACTION"]["token"]
 
 headers = {"Authorization": "token " + token, "Content-Type": "application/json"}
 
 
 def open_graph_ql_query_file(filename: str):
-    with open(os.path.join(os.path.dirname(__file__), "graph_ql_queries", filename), "r") as f:
+    with open(os.path.join(f"{os.path.dirname(__file__)}", "graph_ql_queries", filename), "r") as f:
         output = f.read()
     return output
 
@@ -30,7 +30,7 @@ def run_query(
         )
 
 
-def get_content(
+def get_contents_of_file_in_repo(
     repo_owner: str,
     repo_name: str,
     file_path: str,

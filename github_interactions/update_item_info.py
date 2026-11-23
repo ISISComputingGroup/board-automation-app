@@ -52,7 +52,7 @@ class IssueToUpdate:
         self.set_sprint(self.project_to_use.sprint_ids[self.current_sprint])
 
     def get_repo(self):
-        get_repo_query = gql_queries.open_graph_ql_query_file("findIssueRepo.txt").replace(
+        get_repo_query = gql_queries.open_graph_ql_query_file("findIssueInfo.txt").replace(
             "<ISSUE>", self.issue_id
         )
         self.repo_name = gql_queries.run_query(get_repo_query)["data"]["node"]["repository"]["name"]

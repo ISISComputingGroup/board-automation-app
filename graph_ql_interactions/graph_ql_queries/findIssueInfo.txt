@@ -1,0 +1,59 @@
+query findIssueInfo {
+    node(id: "<ISSUE>") {
+        ... on Issue {
+            number
+            id
+            repository {
+                name
+            }
+            assignees (first: 10) {
+                edges {
+                    node {
+                        id
+                        login
+                        name
+                    }
+                }
+            }
+            comments (last: 1){
+                nodes {
+                    createdAt
+                }
+            }
+            labels(first: 10){
+                nodes {
+                    name
+                }
+            }
+            timelineItems(last: 20, itemTypes: [LABELED_EVENT]){
+                totalCount
+                edges {
+                    node {
+                        ... on LabeledEvent{
+                            createdAt
+                            label {
+                                name
+                            }
+                        }
+                    }
+                }
+            }
+            projectItems(last: 1){
+                totalCount
+                nodes {
+                    ... on ProjectV2Item {
+                        createdAt
+                        fieldValues(last: 20 ) {
+                            nodes {
+                                ... on ProjectV2ItemFieldSingleSelectValue {
+                                    name
+                                    createdAt
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

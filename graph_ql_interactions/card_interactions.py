@@ -7,12 +7,12 @@ from github_interactions import card_info
 card_info_query = gql_queries.open_graph_ql_query_file("findCardInfo.txt")
 update_labels = gql_queries.open_graph_ql_query_file("UpdateItemLabel.txt")
 remove_label_mutation = gql_queries.open_graph_ql_query_file("RemoveLabel.txt")
-card_repo_query = gql_queries.open_graph_ql_query_file("findIssueRepo.txt")
 set_sprint_mutation = gql_queries.open_graph_ql_query_file("UpdateSprintForItemInProject.txt")
 set_points_mutation = gql_queries.open_graph_ql_query_file("UpdatePointsForItemInProject.txt")
-get_last_comment_datetime = gql_queries.open_graph_ql_query_file("findIssueLastCommentCreated.txt")
-get_issue_labels_added = gql_queries.open_graph_ql_query_file("findIssueLabelsAdded.txt")
-get_issue_assignees = gql_queries.open_graph_ql_query_file("findIssueAssignees.txt")
+get_last_comment_datetime = gql_queries.open_graph_ql_query_file("findIssueInfo.txt")
+get_issue_labels_added = gql_queries.open_graph_ql_query_file("findIssueInfo.txt")
+get_issue_assignees = gql_queries.open_graph_ql_query_file("findIssueInfo.txt")
+get_field_changes = gql_queries.open_graph_ql_query_file("findIssueInfo.txt")
 
 
 def get_cards_in_project(org_name: str = "", project_number: str = ""):
@@ -188,12 +188,6 @@ def remove_label(issue_id: str, label_id_to_remove: str):
     )
 
 
-def get_repo_for_issue(issue_id: str):
-    return gql_queries.run_query(card_repo_query.replace("<ISSUE>", issue_id))["data"]["node"][
-        "repository"
-    ]["name"]
-
-
 def get_when_last_commented_created_on_issue(issue_id: str):
     try:
         last_comment_datetime = gql_queries.run_query(
@@ -224,8 +218,6 @@ def get_when_labels_were_added_to_issue(issue_id: str):
 
 
 def get_assignees(issue_id: str):
-    if issue_id is None:
-        return []
     response = gql_queries.run_query(get_issue_assignees.replace("<ISSUE>", issue_id))
     try:
         assignees = response["data"]["node"]["assignees"]["edges"]
@@ -235,6 +227,19 @@ def get_assignees(issue_id: str):
     for assignee in assignees:
         assignee_names.append(assignee["node"]["name"])
     return assignee_names
+
+
+def get_when_specified_project_field_was_last_changed(issue_id: str, field_value: str):
+    field_values = gql_queries.run_query(get_field_changes.replace("<ISSUE>", issue_id))["data"][
+        "node"
+    ]["projectItems"]["nodes"][0]["fieldValues"]["nodes"]
+    status_changed_date = datetime.today()
+    for value in field_values:
+        if value:
+            if value["name"] == field_value:
+                status_changed_date = datetime.strptime(value["createdAt"], "%Y-%m-%dT%H:%M:%SZ")
+                continue
+    return status_changed_date
 
 
 def set_sprint(item_id: str, sprint_field_id: str, sprint_to_use: str, project_id: str):

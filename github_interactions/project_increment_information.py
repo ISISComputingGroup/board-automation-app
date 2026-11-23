@@ -1,5 +1,5 @@
 import re
-import graph_ql_interactions.github_request_functions as gql_queries
+from graph_ql_interactions import project_interactions
 from github_interactions.sprint_information import SprintInfo
 import datetime
 
@@ -18,7 +18,7 @@ class ProjectIncrement:
             self.month = "01"
         else:
             try:
-                offset = re.compile("\d\d\d\d_\d\d").search(title).span()[0]
+                offset = re.compile(r"\d\d\d\d_\d\d").search(title).span()[0]
                 self.year = title[offset : offset + 4]
                 self.month = title[offset + 5 : offset + 7]
             except AttributeError:
@@ -46,13 +46,7 @@ class ProjectIncrement:
         return "This is project increment: " + self.title
 
     def get_sprints_and_statuses(self):
-        sprint_list_id_query = gql_queries.open_graph_ql_query_file("findProjectSprints.txt")
-
-        fields = gql_queries.run_query(
-            sprint_list_id_query.replace("<PROJ_NUM>", str(self.number)).replace(
-                "<ORG_NAME>", self.org_name
-            )
-        )["data"]["organization"]["projectV2"]["fields"]["nodes"]
+        fields = project_interactions.get_project_field_list(self.number, self.org_name)
         # Get sprint list
         for field in fields:
             match field["name"]:

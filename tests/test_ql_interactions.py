@@ -4,13 +4,29 @@ from unittest import TestCase
 import graph_ql_interactions.github_request_functions as ql
 import graph_ql_interactions.repo_interactions as ri
 import graph_ql_interactions.card_interactions as ci
+import graph_ql_interactions.project_interactions as pi
 import requests_mock
 from unittest.mock import mock_open, patch
 from test_helpers import build_response, QlCommand, bad_return, snapshot_name_to_status_lookup
 import json
+import datetime
 
 # The URL to be mocked here is usually the GitHub graphQL API
 url = "https://api.github.com/graphql"
+
+card_list_expected_snapshot = {
+    "ready": [
+        {"number": 1, "repo": "repo_1"},
+        {"number": 2, "repo": "repo_1"},
+        {"number": 1, "repo": "repo_2"},
+        {"number": 2, "repo": "repo_2"},
+    ],
+    "rework": [{"number": 1, "repo": "repo_1"}],
+    "in_progress": [{"number": 3, "repo": "repo_1"}, {"number": 4, "repo": "repo_1"}],
+    "impeded": [{"number": 3, "repo": "repo_2"}],
+    "review": [{"number": 4, "repo": "repo_2"}, {"number": 5, "repo": "repo_1"}],
+    "done": [{"number": 5, "repo": "repo_2"}, {"number": 6, "repo": "repo_3"}],
+}
 
 
 class TestRepoInteractions(TestCase):
@@ -47,6 +63,19 @@ class TestRepoInteractions(TestCase):
         )
         self.assertEqual(ri.get_repo_labels("org_name", repo_name), expected_labels)
 
+    @requests_mock.mock()
+    def test_get_pull_requests(self, m):
+        repo_name = "repo_name"
+        expected_pull_requests = [
+            {"title": "PR Title", "bodyText": "Notes about the PR", "closed": False},
+        ]
+        m.post(
+            url,
+            text=build_response(QlCommand.find_pull_requests, expected_prs=expected_pull_requests),
+            status_code=200,
+        )
+        self.assertEqual(ri.get_pull_requests("org_name", repo_name), expected_pull_requests)
+
 
 class TestGraphQlFunctions(TestCase):
     @patch("builtins.open", mock_open(read_data="data"))
@@ -55,7 +84,7 @@ class TestGraphQlFunctions(TestCase):
         assert result == "data"
 
     # Values for the run_query class which can be used pass or fail
-    test = {"test": "Antinanco"}
+    test = {"test": "Random"}
     text = json.dumps(test)
     query = "Example"
 
@@ -83,7 +112,10 @@ class TestGraphQlFunctions(TestCase):
         response = json.dumps({"content": expected_64})
         content_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{file_path}?ref={branch}"
         m.get(content_url, text=response, status_code=200)
-        self.assertEqual(ql.get_content(repo_owner, repo_name, file_path, branch), expected_value)
+        self.assertEqual(
+            ql.get_contents_of_file_in_repo(repo_owner, repo_name, file_path, branch),
+            expected_value,
+        )
 
 
 class TestCardInteractions(TestCase):
@@ -126,31 +158,19 @@ class TestCardInteractions(TestCase):
 
     @requests_mock.mock()
     def test_get_card_list_snapshot_for_sprint(self, m):
-        expected_snapshot = {
-            "ready": [
-                {"number": 1, "repo": "repo_1"},
-                {"number": 2, "repo": "repo_1"},
-                {"number": 1, "repo": "repo_2"},
-                {"number": 2, "repo": "repo_2"},
-            ],
-            "rework": [{"number": 1, "repo": "repo_1"}],
-            "in_progress": [{"number": 3, "repo": "repo_1"}, {"number": 4, "repo": "repo_1"}],
-            "impeded": [{"number": 3, "repo": "repo_2"}],
-            "review": [{"number": 4, "repo": "repo_2"}, {"number": 5, "repo": "repo_1"}],
-            "done": [{"number": 5, "repo": "repo_2"}, {"number": 6, "repo": "repo_3"}],
-        }
         sprint_name = "sprint"
         m.post(
             url,
             text=build_response(
                 QlCommand.find_card_info,
                 card_type="card_list_snapshot",
-                expected_snapshot=expected_snapshot,
+                expected_snapshot=card_list_expected_snapshot,
                 sprint_name=sprint_name,
             ),
         )
         self.assertDictEqual(
-            ci.get_card_list_snapshot_for_sprint("org_name", "0", sprint_name), expected_snapshot
+            ci.get_card_list_snapshot_for_sprint("org_name", "0", sprint_name),
+            card_list_expected_snapshot,
         )
 
     @requests_mock.mock()
@@ -209,50 +229,25 @@ class TestCardInteractions(TestCase):
 
     @requests_mock.mock()
     def test_get_card_issue_ids_in_sprint(self, m):
-        expected_snapshot = {
-            "ready": [
-                {"number": 1, "repo": "repo_1"},
-                {"number": 2, "repo": "repo_1"},
-                {"number": 1, "repo": "repo_2"},
-                {"number": 2, "repo": "repo_2"},
-            ],
-            "rework": [{"number": 1, "repo": "repo_1"}],
-            "in_progress": [{"number": 3, "repo": "repo_1"}, {"number": 4, "repo": "repo_1"}],
-            "impeded": [{"number": 3, "repo": "repo_2"}],
-            "review": [{"number": 4, "repo": "repo_2"}, {"number": 5, "repo": "repo_1"}],
-            "done": [{"number": 5, "repo": "repo_2"}, {"number": 6, "repo": "repo_3"}],
-        }
         sprint_name = "sprint"
         expected_issues = []
-        for entry in expected_snapshot:
+        for entry in card_list_expected_snapshot:
             if entry == "rework":
                 continue
-            for item in expected_snapshot[entry]:
+            for item in card_list_expected_snapshot[entry]:
                 expected_issues.append(f"issue_{item['number']}")
         m.post(
             url,
             text=build_response(
                 QlCommand.find_card_info,
                 card_type="card_list_snapshot",
-                expected_snapshot=expected_snapshot,
+                expected_snapshot=card_list_expected_snapshot,
                 sprint_name=sprint_name,
             ),
         )
         self.assertEqual(
             ci.get_card_issue_ids_in_sprint("org_name", "0", sprint_name), expected_issues
         )
-
-    @requests_mock.mock()
-    def test_get_repo_for_issue(self, m):
-        repo = "repo_name"
-        m.post(url, text=build_response(QlCommand.find_issue_repo, repo_name=repo))
-        self.assertEqual(ci.get_repo_for_issue("something"), repo)
-
-    @requests_mock.mock()
-    def test_get_when_last_commented_created_on_issue(self, m):
-        created = "2025-02-14T15:15:59Z"
-        m.post(url, text=build_response(QlCommand.find_last_comment, created_at=created))
-        self.assertEqual(ci.get_when_last_commented_created_on_issue("something"), created)
 
     @requests_mock.mock()
     def test_get_when_labels_were_added_to_issue(self, m):
@@ -271,3 +266,44 @@ class TestCardInteractions(TestCase):
             text=build_response(QlCommand.find_assignees, expected_assignees=expected_assignees),
         )
         self.assertEqual(ci.get_assignees("something"), expected_assignees)
+
+    @requests_mock.mock()
+    def test_get_when_specified_project_field_was_last_changed(self, m):
+        changed = "2025-02-14T15:15:59Z"
+        status = "status"
+        expected_changed = datetime.datetime.strptime(changed, "%Y-%m-%dT%H:%M:%SZ")
+        m.post(
+            url,
+            text=build_response(
+                QlCommand.find_field_change, created_at=changed, issue_status=status
+            ),
+        )
+        self.assertEqual(
+            ci.get_when_specified_project_field_was_last_changed("something", status),
+            expected_changed,
+        )
+
+
+class TestProjectInteractions(TestCase):
+    @requests_mock.mock()
+    def test_get_projects(self, m):
+        expected_projects = [{"title": "Project 1"}, {"title": "Project 2"}]
+        m.post(
+            url,
+            text=build_response(QlCommand.find_projects, expected_projects=expected_projects),
+            status_code=200,
+        )
+        self.assertEqual(pi.get_projects("something"), expected_projects)
+
+    @requests_mock.mock()
+    def test_get_project_field_list(self, m):
+        field_list = [
+            {"name": "field_1", "id": "field_1_id"},
+            {"name": "field_2", "id": "field_2_id"},
+        ]
+        m.post(
+            url,
+            text=build_response(QlCommand.find_project_field_list, expected_field_list=field_list),
+            status_code=200,
+        )
+        self.assertEqual(pi.get_project_field_list(1, "something"), field_list)

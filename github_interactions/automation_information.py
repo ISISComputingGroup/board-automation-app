@@ -4,17 +4,17 @@ import os
 from burndown_interactions import burndown
 import logging
 import re
-import graph_ql_interactions.github_request_functions as gql_queries
 import graph_ql_interactions.card_interactions as cards
 import graph_ql_interactions.repo_interactions as repos
+import graph_ql_interactions.project_interactions as projects
 import github_interactions.repo_information as repo_info
-import github_interactions.project_increment_information as projects
+import github_interactions.project_increment_information as project_increments
 from github_interactions.board_checks import BoardChecks
 
 pm_logger = logging.getLogger("board_automation")
 
 
-def build_html_table(info: {}):
+def build_html_table(info: dict):
     data = "<table><tr>"
     for heading in info.keys():
         data += "<th>" + heading + "</th>"
@@ -46,7 +46,7 @@ class AutomationInfo:
         self.html_message = ""
         # Get values from config.ini
         config = configparser.ConfigParser()
-        config.read(os.path.join(os.path.dirname(__file__), "..", "config_info", "config.ini"))
+        config.read(os.path.join(f"{os.path.dirname(__file__)}", "..", "config_info", "config.ini"))
 
         self.user_name = config["GITHUB.INTERACTION"]["user_name"]
         self.org_name = config["GITHUB.INTERACTION"]["org_name"]
@@ -148,7 +148,10 @@ class AutomationInfo:
         self.update_projects()
         self.set_today()
         self.set_previous_current_and_next_sprint()
-        self.current_burndown.change_sprint()
+        self.current_burndown.change_sprint(
+            self.current_sprint,
+            self.next_sprint,
+        )
         cards_to_refine = cards.get_card_issue_ids_in_sprint(
             org_name=self.org_name, project_number=self.project_number, sprint=self.current_sprint
         )
@@ -157,18 +160,15 @@ class AutomationInfo:
                 card,
                 repos.get_label_id(
                     org_name=self.org_name,
-                    repo_name=cards.get_repo_for_issue(card),
+                    repo_name=card.repo,
                     label_name="proposal",
                 ),
             )
 
     def update_projects(self):
-        # Find the V2 projects owned by the organization
+        # Find the V2 projects owned by the organisation
         self.html_message = ""
-        proj_list_query = gql_queries.open_graph_ql_query_file("findProjects.txt")
-        result_projects = gql_queries.run_query(
-            proj_list_query.replace("<ORG_NAME>", self.org_name)
-        )["data"]["organization"]["projectsV2"]["nodes"]
+        result_projects = projects.get_projects(org_name=self.org_name)
 
         # Filter out a dictionary of the PIs
         for result_project in result_projects:
@@ -180,7 +180,7 @@ class AutomationInfo:
             if is_pi >= 0 and not result_project["template"] and not result_project["closed"]:
                 if result_project["title"] not in self.available_program_increments.keys():
                     self.available_program_increments[result_project["title"]] = (
-                        projects.ProjectIncrement(
+                        project_increments.ProjectIncrement(
                             project_id=result_project["id"],
                             number=result_project["number"],
                             title=result_project["title"],

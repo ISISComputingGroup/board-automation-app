@@ -52,7 +52,7 @@ working_information = automation_information.AutomationInfo()
 
 # Get the items from the config file
 config = configparser.ConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), "config_info", "config.ini"))
+config.read(os.path.join(f"{os.path.dirname(__file__)}", "config_info", "config.ini"))
 try:
     secret = config["GITHUB.INTERACTION"]["webhook_secret"]
     host = config["WWW.INTERACTION"]["host"]
@@ -70,13 +70,17 @@ except KeyError as ke:
 
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
-        self.render(os.path.join(os.path.dirname(__file__), "pi_and_sprint_actions", "home.html"))
+        self.render(
+            os.path.join(f"{os.path.dirname(__file__)}", "pi_and_sprint_actions", "home.html")
+        )
 
 
 class SprintHandler(tornado.web.RequestHandler):
     def get(self):
         self.render(
-            os.path.join(os.path.dirname(__file__), "pi_and_sprint_actions", "sprint_data.html"),
+            os.path.join(
+                f"{os.path.dirname(__file__)}", "pi_and_sprint_actions", "sprint_data.html"
+            ),
             current_sprint=working_information.current_sprint,
             next_sprint=working_information.next_sprint,
             misc_message=working_information.html_message,
@@ -86,7 +90,7 @@ class SprintHandler(tornado.web.RequestHandler):
         working_information.update_sprints()
         self.render(
             os.path.join(
-                os.path.dirname(__file__), "pi_and_sprint_actions", "updated_sprint_data.html"
+                f"{os.path.dirname(__file__)}", "pi_and_sprint_actions", "updated_sprint_data.html"
             ),
             current_sprint=working_information.current_sprint,
             next_sprint=working_information.next_sprint,
@@ -97,7 +101,9 @@ class SprintHandler(tornado.web.RequestHandler):
 class MoveTicketsHandler(tornado.web.RequestHandler):
     def post(self):
         working_information.move_tickets_to_next_sprint()
-        self.render(os.path.join(os.path.dirname(__file__), "pi_and_sprint_actions", "home.html"))
+        self.render(
+            os.path.join(f"{os.path.dirname(__file__)}", "pi_and_sprint_actions", "home.html")
+        )
 
 
 class ColumnFrequencyHandler(tornado.web.RequestHandler):
@@ -105,7 +111,9 @@ class ColumnFrequencyHandler(tornado.web.RequestHandler):
         snapshot = working_information.get_cards_snapshot()
         self.render(
             os.path.join(
-                os.path.dirname(__file__), "pi_and_sprint_actions", "column_count_and_points.html"
+                f"{os.path.dirname(__file__)}",
+                "pi_and_sprint_actions",
+                "column_count_and_points.html",
             ),
             misc_message=working_information.html_message,
             ready_count=snapshot["ready"]["count"],
@@ -149,7 +157,7 @@ class WebhookError(Exception):
 def verify_signature(payload_body, secret_token, signature_header):
     """Verify that the payload was sent from GitHub by validating SHA256.
 
-    Raise and return 403 if not authorized.
+    Raise and return 403 if not authorised.
 
     Args:
         payload_body: original request body to verify (request.body())

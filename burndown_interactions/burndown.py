@@ -19,7 +19,7 @@ class Burndown:
         project_number: str,
         current_sprint_name: str,
         next_sprint_name: str,
-        sprints: {},
+        sprints: dict,
     ):
         self.fig = go.Figure()
         self.org_name = org_name
@@ -28,7 +28,7 @@ class Burndown:
         self.next_sprint_name = next_sprint_name
         self.sprints = sprints
         self.csv_headings = "Date,Backlog,In Progress,Impeded,Review,Done\n"
-        self.burndown_csv = os.path.join(os.path.dirname(__file__), "burndown-points.csv")
+        self.burndown_csv = os.path.join(f"{os.path.dirname(__file__)}", "burndown-points.csv")
         if sprints:
             self.update_display()
         else:
@@ -124,7 +124,9 @@ class Burndown:
             fig.update_layout(showlegend=True)
             self.fig = fig
         else:
-            with open(os.path.join(os.path.dirname(__file__), "burndown_unavailable"), "r") as f:
+            with open(
+                os.path.join(f"{os.path.dirname(__file__)}", "burndown_unavailable"), "r"
+            ) as f:
                 self.fig = f.read()
 
     def add_new_csv_line(self):
@@ -153,7 +155,7 @@ class Burndown:
         with open(self.burndown_csv, "a") as f:
             f.write(entry)
 
-    def fill_csv_lines(self, today: datetime, last_day_inner: datetime, data: pd.DataFrame):
+    def fill_csv_lines(self, today: datetime, last_day_inner: datetime, data: pd.Series):
         for missing_day in range((today - last_day_inner).days - 1):
             with open(self.burndown_csv, "a") as f:
                 entry_list = [
@@ -215,7 +217,13 @@ class Burndown:
 
         return pd.read_csv(self.burndown_csv)
 
-    def change_sprint(self):
+    def change_sprint(
+        self,
+        current_sprint_name: str,
+        next_sprint_name: str,
+    ):
         # As the titles assume a non-existent file this will overwrite the file contents with
         # just the titles
+        self.current_sprint_name = current_sprint_name
+        self.next_sprint_name = next_sprint_name
         self.add_csv_titles()

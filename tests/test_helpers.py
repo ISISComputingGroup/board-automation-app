@@ -1,12 +1,11 @@
 import json
 from enum import Enum, auto
 
-from pandas.core.computation.ops import isnumeric
+import pandas
 
 
 class QlCommand(Enum):
     find_card_info = auto()
-    find_issue_repo = auto()
     find_orgs = auto()
     find_projects = auto()
     find_project_sprints = auto()
@@ -15,6 +14,10 @@ class QlCommand(Enum):
     find_last_comment = auto()
     find_labels_added = auto()
     find_assignees = auto()
+    find_field_change = auto()
+    find_pull_requests = auto()
+    find_issue_repo = auto()
+    find_project_field_list = auto()
     remove_label = auto()
     set_project = auto()
     update_item_label = auto()
@@ -31,7 +34,7 @@ def bad_return():
     return json.dumps("Testing Errors")
 
 
-def labels_list(expected_labels: {}):
+def labels_list(expected_labels: dict):
     """
     Formats a list of labels to the correct examples for use via response_mock for the GitHub graphQL API
     :param expected_labels: a dictionary of {"label_name_1": "label_id_1", "label_name_2": "label_id_2", etc.}
@@ -44,7 +47,7 @@ def labels_list(expected_labels: {}):
     return labels
 
 
-def fields_list(expected_fields: {}):
+def fields_list(expected_fields: dict):
     """
     Formats a list of labels to the correct examples for use via response_mock for the GitHub graphQL API
     :param expected_fields: a dictionary of {"field_name_1": "field_value_1", "field_name_2": "field_value_2", etc.}
@@ -53,14 +56,14 @@ def fields_list(expected_fields: {}):
     """
     fields = []
     for entry in expected_fields.keys():
-        if isnumeric(type(expected_fields[entry])):
+        if pandas.api.types.is_numeric_dtype(type(expected_fields[entry])):
             fields.append({"number": expected_fields[entry], "field": {"name": entry}})
         else:
             fields.append({"name": expected_fields[entry], "field": {"name": entry}})
     return fields
 
 
-def field_options(expected_options: {}):
+def field_options(expected_options: dict):
     """
     Formats a list of options to the correct examples for use via response_mock for the GitHub graphQL API
     :param expected_options: a dictionary of {"option_name_1": "option_id_1", "option_name_2": "option_id_2", etc.}
@@ -73,13 +76,14 @@ def field_options(expected_options: {}):
     return options
 
 
-def issue_entry(ident: int, content_id: str, labels: {}, fields: {}, repo_name: str):
+def issue_entry(ident: int, content_id: str, labels: dict, fields: dict, repo_name: str):
     issue = {
         "id": f"node_{ident}",
         "type": "ISSUE",
         "content": {
             "id": content_id,
             "number": ident,
+            "title": f"Issue {ident}",
             "labels": {"nodes": labels_list(labels)},
             "repository": {"name": repo_name},
         },
@@ -88,7 +92,7 @@ def issue_entry(ident: int, content_id: str, labels: {}, fields: {}, repo_name: 
     return issue
 
 
-def draft_issue_entry(ident: int, fields: {}):
+def draft_issue_entry(ident: int, fields: dict):
     draft_issue = {
         "id": f"node_{ident}",
         "type": "DRAFT_ISSUE",
@@ -98,7 +102,7 @@ def draft_issue_entry(ident: int, fields: {}):
     return draft_issue
 
 
-def pull_request_entry(ident: int, fields: {}):
+def pull_request_entry(ident: int, fields: dict):
     pull_request = {
         "id": f"node_{ident}",
         "type": "PULL_REQUEST",
@@ -127,7 +131,7 @@ def build_cards_simple(
     return build_response_contents(issues)
 
 
-def build_response_contents(issues: [], has_next: bool = False, has_previous: bool = False):
+def build_response_contents(issues: list, has_next: bool = False, has_previous: bool = False):
     page_info = {
         "endCursor": "EC",
         "startCursor": "NC",
@@ -168,7 +172,7 @@ def priority_lookup(snapshot_name: str):
             return ""
 
 
-def build_points_snapshot_cards(expected_snapshot: {}, sprint_name: str = "sprint"):
+def build_points_snapshot_cards(expected_snapshot: dict, sprint_name: str = "sprint"):
     issues = []
     outer_index = 0
     for entry in expected_snapshot.keys():
@@ -193,7 +197,7 @@ def build_points_snapshot_cards(expected_snapshot: {}, sprint_name: str = "sprin
     return build_response_contents(issues)
 
 
-def build_card_list_snapshot(expected_snapshot: {}, sprint_name: str = "sprint"):
+def build_card_list_snapshot(expected_snapshot: dict, sprint_name: str = "sprint"):
     issues = []
     for entry in expected_snapshot.keys():
         if entry == "rework":
@@ -209,7 +213,7 @@ def build_card_list_snapshot(expected_snapshot: {}, sprint_name: str = "sprint")
     return build_response_contents(issues)
 
 
-def build_planning_list_snapshot(expected_snapshot: {}, sprint_name: str = "sprint"):
+def build_planning_list_snapshot(expected_snapshot: dict, sprint_name: str = "sprint"):
     issues = []
     for entry in expected_snapshot.keys():
         for item in expected_snapshot[entry]:
@@ -221,7 +225,7 @@ def build_planning_list_snapshot(expected_snapshot: {}, sprint_name: str = "spri
 
 
 def build_pi_statuses(
-    status_field_id: str, statuses: {}, sprint_field_id: str, sprints: {}, points_field_id: str
+    status_field_id: str, statuses: dict, sprint_field_id: str, sprints: dict, points_field_id: str
 ):
     return {
         "data": {
@@ -248,7 +252,7 @@ def build_pi_statuses(
     }
 
 
-def build_label_dates(expected_label_dates: {}):
+def build_label_dates(expected_label_dates: dict):
     labels = []
     for entry in expected_label_dates:
         labels.append({"name": entry})
@@ -258,14 +262,42 @@ def build_label_dates(expected_label_dates: {}):
     return {"data": {"node": {"labels": {"nodes": labels}, "timelineItems": {"edges": edges}}}}
 
 
-def build_assignees(expected_assignees: {}):
+def build_assignees(expected_assignees: dict):
     edges = []
     for assignee in expected_assignees:
         edges.append({"node": {"id": assignee, "login": assignee, "name": assignee}})
     return {"data": {"node": {"assignees": {"edges": edges}}}}
 
 
+def build_field_change(name: str, createdat: str):
+    return {
+        "data": {
+            "node": {
+                "projectItems": {
+                    "nodes": [
+                        {
+                            "fieldValues": {
+                                "nodes": [
+                                    {
+                                        "name": name,
+                                        "createdAt": createdat,
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+
+def build_field_list(expected_field_list: list):
+    return {"data": {"organization": {"projectV2": {"fields": {"nodes": expected_field_list}}}}}
+
+
 def build_response(ql_command: QlCommand, **kwargs):
+    response = ""
     match ql_command:
         case QlCommand.find_repo_label_id:
             response = {"data": {"repository": {"label": {"id": kwargs["expected_label_id"]}}}}
@@ -297,8 +329,6 @@ def build_response(ql_command: QlCommand, **kwargs):
                     )
                 case __:
                     response = ""
-        case QlCommand.find_issue_repo:
-            response = {"data": {"node": {"repository": {"name": kwargs["repo_name"]}}}}
         case QlCommand.find_project_sprints:
             response = build_pi_statuses(
                 kwargs["status_field_id"],
@@ -309,12 +339,27 @@ def build_response(ql_command: QlCommand, **kwargs):
             )
         case QlCommand.find_last_comment:
             response = {
-                "data": {"node": {"comments": {"nodes": [{"createdAt": kwargs["created_at"]}]}}}
+                "labels": {"nodes": labels_list(kwargs["expected_labels"])},
+                "data": {"node": {"comments": {"nodes": [{"createdAt": kwargs["created_at"]}]}}},
             }
         case QlCommand.find_labels_added:
             response = build_label_dates(kwargs["expected_label_dates"])
         case QlCommand.find_assignees:
             response = build_assignees(kwargs["expected_assignees"])
+        case QlCommand.find_field_change:
+            response = build_field_change(
+                name=kwargs["issue_status"], createdat=kwargs["created_at"]
+            )
+        case QlCommand.find_projects:
+            response = {
+                "data": {"organization": {"projectsV2": {"nodes": kwargs["expected_projects"]}}}
+            }
+        case QlCommand.find_pull_requests:
+            response = {"data": {"repository": {"pullRequests": {"nodes": kwargs["expected_prs"]}}}}
+        case QlCommand.find_issue_repo:
+            response = {"data": {"node": {"repository": {"name": kwargs["repo_name"]}}}}
+        case QlCommand.find_project_field_list:
+            response = build_field_list(kwargs["expected_field_list"])
         case __:
             response = ""
     return json.dumps(response)

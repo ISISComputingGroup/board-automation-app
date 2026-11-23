@@ -305,6 +305,7 @@ class TestCardInfo(TestCase):
             "type": "ISSUE",
             "content": {
                 "number": card_ident,
+                "title": f"Issue_{card_ident}",
                 "labels": {"nodes": []},
                 "repository": {"name": repo_name},
             },
@@ -353,6 +354,7 @@ class TestBoardChecks(TestCase):
             "no_points_labels": "no_points_labels_allowed",
             "zero_points_labels": "zero_points_labels_allowed",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     @patch("github_interactions.board_checks.BoardChecks.check_assignees")
@@ -360,12 +362,17 @@ class TestBoardChecks(TestCase):
     @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
-    def test_number_of_points_labels(
+    def test_number_of_points_labels_and_checking_points_labels(
         self, prs, release_notes, check_release_notes, check_stale, assignees, config_parser
     ):
         card_ident = 6
+        card_title = f"{card_ident} - Issue {card_ident}"
         repo_name = "Repo"
-        expected_labels = {"1": "label_1_id", "2": "label_2_id"}
+        expected_labels = {
+            "1": "label_1_id",
+            "2": "label_2_id",
+            "status": "status_label_id",
+        }
         sprint = "Sprint"
         status = "Status"
         points = 2
@@ -391,7 +398,7 @@ class TestBoardChecks(TestCase):
         )
         self.assertEqual(
             class_response.problem_text,
-            [f"ERROR: Issue {card_ident} in {repo_name} assigned to [] has multiple points labels"],
+            [f"ERROR: Issue {card_title} in {repo_name} assigned to [] has multiple points labels"],
         )
 
     # Test 7: No points labels
@@ -401,6 +408,7 @@ class TestBoardChecks(TestCase):
             "no_points_labels": "no_points_labels_allowed",
             "zero_points_labels": "zero_points_labels_allowed",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     @patch("github_interactions.board_checks.BoardChecks.check_assignees")
@@ -408,12 +416,17 @@ class TestBoardChecks(TestCase):
     @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
-    def test_no_points_labels(
+    def test_no_points_labels_and_checking_points_labels(
         self, release_notes, prs, check_notes, check_stale, assignees, config_parser
     ):
         card_ident = 7
+        card_title = f"{card_ident} - Issue {card_ident}"
         repo_name = "Repo"
-        expected_labels = {"label_1": "label_1_id", "label_2": "label_2_id"}
+        expected_labels = {
+            "label_1": "label_1_id",
+            "label_2": "label_2_id",
+            "status": "status_label_id",
+        }
         sprint = "Sprint"
         status = "Status"
         points = 2
@@ -440,7 +453,7 @@ class TestBoardChecks(TestCase):
         self.assertEqual(
             class_response.problem_text,
             [
-                f"ERROR: Issue {card_ident} in {repo_name} assigned to [] has no points labels and it should have"
+                f"ERROR: Issue {card_title} in {repo_name} assigned to [] has no points labels and it should have"
             ],
         )
 
@@ -451,6 +464,7 @@ class TestBoardChecks(TestCase):
             "no_points_labels": "no_points_labels_allowed",
             "zero_points_labels": "zero_points_labels_allowed",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     @patch("github_interactions.board_checks.BoardChecks.check_assignees")
@@ -458,7 +472,7 @@ class TestBoardChecks(TestCase):
     @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
-    def test_no_points_labels_permitted(
+    def test_no_points_labels_permitted_and_checking_points_labels(
         self, release_notes, prs, check_notes, comment_stale, assignees, config_parser
     ):
         card_ident = 8
@@ -467,6 +481,7 @@ class TestBoardChecks(TestCase):
             "label_1": "label_1_id",
             "label_2": "label_2_id",
             "no_points_labels_allowed": "no_points_labels_allowed",
+            "status": "status_label_id",
         }
         sprint = "Sprint"
         status = "Status"
@@ -501,6 +516,7 @@ class TestBoardChecks(TestCase):
             "no_points_labels": "no_points_labels_allowed",
             "zero_points_labels": "zero_points_labels_allowed",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     @patch("github_interactions.board_checks.BoardChecks.check_assignees")
@@ -508,7 +524,7 @@ class TestBoardChecks(TestCase):
     @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
     @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
-    def test_zero_points_labels_permitted(
+    def test_zero_points_labels_permitted_and_checking_points_labels(
         self, prs, release_notes, check_notes, stale, assignees, config_parser
     ):
         card_ident = 9
@@ -517,6 +533,7 @@ class TestBoardChecks(TestCase):
             "0": "0_point_label_id",
             "label_2": "label_2_id",
             "zero_points_labels_allowed": "zero_points_labels_allowed",
+            "status": "status_label_id",
         }
         sprint = "Sprint"
         status = "Status"
@@ -549,10 +566,11 @@ class TestBoardChecks(TestCase):
     @patch(
         "configparser.ConfigParser.__getitem__",
         return_value={
-            "comment_errors": "Comment: 28",
-            "label_warnings": "Status Check: 7",
-            "label_errors": "Status Check: 28",
+            "comment_errors": "comment:28",
+            "label_warnings": "status check:7",
+            "label_errors": "status check:28",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     @patch("github_interactions.board_checks.BoardChecks.check_assignees")
@@ -565,8 +583,9 @@ class TestBoardChecks(TestCase):
     ):
         card_ident = 10
         content_id = f"issue_{card_ident}"
+        card_title = f"{card_ident} - Issue {card_ident}"
         repo_name = "Repo"
-        expected_labels = {"Status Error": "Status Error ID"}
+        expected_labels = {"status error": "Status Error ID", "comment": "comment ID for testing"}
         sprint = "Sprint"
         status = "Comment"
         points = 0
@@ -585,7 +604,9 @@ class TestBoardChecks(TestCase):
         m.post(
             url,
             text=build_response(
-                QlCommand.find_last_comment, created_at=recent_comment_date.strftime(date_format)
+                QlCommand.find_last_comment,
+                created_at=recent_comment_date.strftime(date_format),
+                expected_labels=expected_labels,
             ),
         )
         class_response = BoardChecks(
@@ -605,23 +626,27 @@ class TestBoardChecks(TestCase):
         m.post(
             url,
             text=build_response(
-                QlCommand.find_last_comment, created_at=turning_comment_date.strftime(date_format)
+                QlCommand.find_last_comment,
+                created_at=turning_comment_date.strftime(date_format),
+                expected_labels=expected_labels,
             ),
         )
         class_response.update_checks()
         self.assertTrue(
-            f"ERROR: Issue {card_ident} in {status} assigned to [] last had a comment added 28 days or more ago."
+            f"ERROR: Issue {card_title} in {status} assigned to [] last had a comment added 28 days or more ago."
             in class_response.problem_text
         )
         m.post(
             url,
             text=build_response(
-                QlCommand.find_last_comment, created_at=old_comment_date.strftime(date_format)
+                QlCommand.find_last_comment,
+                created_at=old_comment_date.strftime(date_format),
+                expected_labels=expected_labels,
             ),
         )
         class_response.update_checks()
         self.assertTrue(
-            f"ERROR: Issue {card_ident} in {status} assigned to [] last had a comment added 28 days or more ago."
+            f"ERROR: Issue {card_title} in {status} assigned to [] last had a comment added 28 days or more ago."
             in class_response.problem_text
         )
 
@@ -631,10 +656,11 @@ class TestBoardChecks(TestCase):
     @patch(
         "configparser.ConfigParser.__getitem__",
         return_value={
-            "comment_errors": "Comment: 28",
-            "label_warnings": "Status Check: 7",
-            "label_errors": "Status Check: 28",
+            "comment_errors": "comment:28",
+            "label_warnings": "status check:7",
+            "label_errors": "status check:28",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     @patch("github_interactions.board_checks.BoardChecks.check_assignees")
@@ -644,6 +670,7 @@ class TestBoardChecks(TestCase):
     @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
     def test_stale_label_error(self, m, prs, notes, check_notes, points, assignees, config_parser):
         card_ident = 11
+        card_title = f"{card_ident} - Issue {card_ident}"
         label_warning_at = 7
         label_error_at = 28
         content_id = f"issue_{card_ident}"
@@ -652,7 +679,7 @@ class TestBoardChecks(TestCase):
         status = "Status Check"
         points = 0
         priority = "Medium"
-        label = "Status Check"
+        label = "status check"
         provided_fields = {
             "Points": points,
             "Planning Priority": priority,
@@ -666,7 +693,7 @@ class TestBoardChecks(TestCase):
         date_format = "%Y-%m-%dT%H:%M:%SZ"
 
         # Check One - no issues
-        expected_labels["Status Check"] = today.strftime(date_format)
+        expected_labels["status check"] = today.strftime(date_format)
         m.post(
             url,
             text=build_response(QlCommand.find_labels_added, expected_label_dates=expected_labels),
@@ -687,26 +714,26 @@ class TestBoardChecks(TestCase):
         self.assertEqual(class_response.problem_text, [])
 
         # Check Two - Warning
-        expected_labels["Status Check"] = stale_warning.strftime(date_format)
+        expected_labels["status check"] = stale_warning.strftime(date_format)
         m.post(
             url,
             text=build_response(QlCommand.find_labels_added, expected_label_dates=expected_labels),
         )
         class_response.update_checks()
         self.assertTrue(
-            f"WARNING: Issue {card_ident} assigned to [] had {label} label added more than {label_warning_at} days ago."
+            f"Warning: Issue {card_title} assigned to [] had {label} label added more than {label_warning_at} days ago."
             in class_response.problem_text
         )
 
         # Check Three - Error
-        expected_labels["Status Check"] = stale_error.strftime(date_format)
+        expected_labels["status check"] = stale_error.strftime(date_format)
         m.post(
             url,
             text=build_response(QlCommand.find_labels_added, expected_label_dates=expected_labels),
         )
         class_response.update_checks()
         self.assertTrue(
-            f"ERROR: Issue {card_ident} assigned to [] had {label} label added more than {label_error_at} days ago."
+            f"ERROR: Issue {card_title} assigned to [] had {label} label added more than {label_error_at} days ago."
             in class_response.problem_text
         )
 
@@ -722,6 +749,7 @@ class TestBoardChecks(TestCase):
         return_value={
             "allow_unassigned": "unassigned_allowed",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     def test_check_assignees_unassigned_allowed(
@@ -729,7 +757,7 @@ class TestBoardChecks(TestCase):
     ):
         card_ident = 12
         repo_name = "Repo"
-        expected_labels = {"5": "5"}
+        expected_labels = {"5": "5", "unassigned_allowed": "status_label_id"}
         sprint = "Sprint"
         status = "unassigned_allowed"
         points = 0
@@ -780,14 +808,19 @@ class TestBoardChecks(TestCase):
         return_value={
             "allow_unassigned": "unassigned_allowed",
             "release_notes_repo": "Repo",
+            "check_points_labels": "True",
         },
     )
     def test_check_assignees_when_required(
         self, m, config_parser, check_notes, check_stale, release_notes, prs
     ):
         card_ident = 13
+        card_title = f"{card_ident} - Issue {card_ident}"
         repo_name = "Repo"
-        expected_labels = {"5": "5"}
+        expected_labels = {
+            "5": "5",
+            "assigned_required": "status_label_id",
+        }
         sprint = "Sprint"
         status = "assigned_required"
         points = 0
@@ -817,7 +850,7 @@ class TestBoardChecks(TestCase):
             ]
         )
         self.assertTrue(
-            f"ERROR: Issue {card_ident} in {repo_name} with {status} status does not have anyone assigned."
+            f"ERROR: Issue {card_title} in {repo_name} with {status} status does not have anyone assigned."
             in class_response.problem_text
         )
         class_response.problem_text = []
@@ -835,6 +868,260 @@ class TestBoardChecks(TestCase):
         )
         class_response.update_checks()
         self.assertEqual(class_response.problem_text, [])
+
+    # Test 14: Don't check points
+    # Note Config Parser is a patch, so is not used directly but is needed in the called section
+    @patch(
+        "configparser.ConfigParser.__getitem__",
+        return_value={
+            "no_points_labels": "no_points_labels_allowed",
+            "zero_points_labels": "zero_points_labels_allowed",
+            "release_notes_repo": "Repo",
+            "check_points_labels": "False",
+        },
+    )
+    @patch("github_interactions.board_checks.BoardChecks.check_assignees")
+    @patch("github_interactions.board_checks.BoardChecks.check_if_stale")
+    @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
+    def test_do_not_test_points_labels(
+        self, prs, release_notes, check_notes, stale, assignees, config_parser
+    ):
+        card_ident = 9
+        repo_name = "Repo"
+        expected_labels = {
+            "label_2": "label_2_id",
+            "status": "status_label_id",
+        }
+        sprint = "Sprint"
+        status = "Status"
+        points = 0
+        priority = "Medium"
+        provided_fields = {
+            "Points": points,
+            "Planning Priority": priority,
+            "Status": status,
+            "Sprint": sprint,
+        }
+        class_response = BoardChecks(
+            [
+                CardInfo(
+                    issue_entry(
+                        ident=card_ident,
+                        content_id=f"issue_{card_ident}",
+                        labels=expected_labels,
+                        fields=provided_fields,
+                        repo_name=repo_name,
+                    )
+                )
+            ]
+        )
+        self.assertEqual(class_response.problem_text, [])
+
+    # Test 15: Check Status and Labels match
+    # Note Config Parser is a patch, so is not used directly but is needed in the called section
+    @patch(
+        "configparser.ConfigParser.__getitem__",
+        return_value={
+            "no_points_labels": "no_points_labels_allowed",
+            "zero_points_labels": "zero_points_labels_allowed",
+            "release_notes_repo": "Repo",
+            "check_points_labels": "False",
+        },
+    )
+    @patch("github_interactions.board_checks.BoardChecks.check_assignees")
+    @patch("github_interactions.board_checks.BoardChecks.check_if_stale")
+    @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
+    def test_check_status_and_labels_match(
+        self, prs, release_notes, check_notes, stale, assignees, config_parser
+    ):
+        card_ident = 15
+        repo_name = "Repo"
+        expected_labels = {
+            "status": "status_label_id",
+            "another_label": "another_label_id",
+        }
+        sprint = "Sprint"
+        status = "Status"
+        points = 0
+        priority = "Medium"
+        provided_fields = {
+            "Points": points,
+            "Planning Priority": priority,
+            "Status": status,
+            "Sprint": sprint,
+        }
+        class_response = BoardChecks(
+            [
+                CardInfo(
+                    issue_entry(
+                        ident=card_ident,
+                        content_id=f"issue_{card_ident}",
+                        labels=expected_labels,
+                        fields=provided_fields,
+                        repo_name=repo_name,
+                    )
+                )
+            ]
+        )
+        self.assertEqual(class_response.problem_text, [])
+
+    # Test 16: Check Status and Labels match
+    # Note Config Parser is a patch, so is not used directly but is needed in the called section
+    @patch(
+        "configparser.ConfigParser.__getitem__",
+        return_value={
+            "no_points_labels": "no_points_labels_allowed",
+            "zero_points_labels": "zero_points_labels_allowed",
+            "release_notes_repo": "Repo",
+            "check_points_labels": "False",
+        },
+    )
+    @patch("github_interactions.board_checks.BoardChecks.check_assignees")
+    @patch("github_interactions.board_checks.BoardChecks.check_if_stale")
+    @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
+    def test_check_status_and_labels_match_ignore_done(
+        self, prs, release_notes, check_notes, stale, assignees, config_parser
+    ):
+        card_ident = 16
+        repo_name = "Repo"
+        expected_labels = {
+            "status": "status_label_id",
+            "another_label": "another_label_id",
+        }
+        sprint = "Sprint"
+        status = "Done"
+        points = 0
+        priority = "Medium"
+        provided_fields = {
+            "Points": points,
+            "Planning Priority": priority,
+            "Status": status,
+            "Sprint": sprint,
+        }
+        class_response = BoardChecks(
+            [
+                CardInfo(
+                    issue_entry(
+                        ident=card_ident,
+                        content_id=f"issue_{card_ident}",
+                        labels=expected_labels,
+                        fields=provided_fields,
+                        repo_name=repo_name,
+                    )
+                )
+            ]
+        )
+        self.assertEqual(class_response.problem_text, [])
+
+    # Test 17: Check Status and Labels match
+    # Note Config Parser is a patch, so is not used directly but is needed in the called section
+    @patch(
+        "configparser.ConfigParser.__getitem__",
+        return_value={
+            "no_points_labels": "no_points_labels_allowed",
+            "zero_points_labels": "zero_points_labels_allowed",
+            "release_notes_repo": "Repo",
+            "check_points_labels": "False",
+        },
+    )
+    @patch("github_interactions.board_checks.BoardChecks.check_assignees")
+    @patch("github_interactions.board_checks.BoardChecks.check_if_stale")
+    @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
+    def test_check_status_and_labels_match_ignore_backlog(
+        self, prs, release_notes, check_notes, stale, assignees, config_parser
+    ):
+        card_ident = 17
+        repo_name = "Repo"
+        expected_labels = {
+            "status": "status_label_id",
+            "another_label": "another_label_id",
+        }
+        sprint = "Sprint"
+        status = "Backlog"
+        points = 0
+        priority = "Medium"
+        provided_fields = {
+            "Points": points,
+            "Planning Priority": priority,
+            "Status": status,
+            "Sprint": sprint,
+        }
+        class_response = BoardChecks(
+            [
+                CardInfo(
+                    issue_entry(
+                        ident=card_ident,
+                        content_id=f"issue_{card_ident}",
+                        labels=expected_labels,
+                        fields=provided_fields,
+                        repo_name=repo_name,
+                    )
+                )
+            ]
+        )
+        self.assertEqual(class_response.problem_text, [])
+
+    # Test 18: Check Status and Labels match
+    # Note Config Parser is a patch, so is not used directly but is needed in the called section
+    @patch(
+        "configparser.ConfigParser.__getitem__",
+        return_value={
+            "no_points_labels": "no_points_labels_allowed",
+            "zero_points_labels": "zero_points_labels_allowed",
+            "release_notes_repo": "Repo",
+            "check_points_labels": "False",
+        },
+    )
+    @patch("github_interactions.board_checks.BoardChecks.check_assignees")
+    @patch("github_interactions.board_checks.BoardChecks.check_if_stale")
+    @patch("github_interactions.board_checks.BoardChecks.check_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_present_release_notes")
+    @patch("github_interactions.board_checks.BoardChecks.get_release_note_prs")
+    def test_check_status_and_labels_match_error(
+        self, prs, release_notes, check_notes, stale, assignees, config_parser
+    ):
+        card_ident = 18
+        repo_name = "Repo"
+        expected_labels = {
+            "mismatch": "status_label_id",
+            "another_label": "another_label_id",
+        }
+        sprint = "Sprint"
+        status = "Status"
+        points = 0
+        priority = "Medium"
+        provided_fields = {
+            "Points": points,
+            "Planning Priority": priority,
+            "Status": status,
+            "Sprint": sprint,
+        }
+        class_response = BoardChecks(
+            [
+                CardInfo(
+                    issue_entry(
+                        ident=card_ident,
+                        content_id=f"issue_{card_ident}",
+                        labels=expected_labels,
+                        fields=provided_fields,
+                        repo_name=repo_name,
+                    )
+                )
+            ]
+        )
+        expected_response = (
+            f"Error: Issue {card_ident} - Issue {card_ident} does not have a "
+            f"suitable label to match the current status of {status}"
+        )
+        self.assertEqual(class_response.problem_text, [expected_response])
 
 
 class TestProjectIncrement(TestCase):
@@ -942,7 +1229,7 @@ class TestSprintInfo(TestCase):
         self.assertEqual(test_class.sprint_day, "01")
         self.assertEqual(test_class.sprint_id, sprint_id)
         self.assertEqual(test_class.sprint_start_date, datetime.datetime(2021, 1, 1, 0, 0))
-        self.assertEqual(str(test_class), str(datetime.datetime(2021, 1, 1, 0, 0)))
+        self.assertEqual(str(test_class), str(f"{datetime.datetime(2021, 1, 1, 0, 0)}"))
 
     # Test 2 - Standard sprint 2020_01_01
     def test_standard_sprint_name(self):
@@ -957,7 +1244,7 @@ class TestSprintInfo(TestCase):
         self.assertEqual(test_class.sprint_day, "02")
         self.assertEqual(test_class.sprint_id, sprint_id)
         self.assertEqual(test_class.sprint_start_date, datetime.datetime(2021, 2, 2, 0, 0))
-        self.assertEqual(str(test_class), str(datetime.datetime(2021, 2, 2, 0, 0)))
+        self.assertEqual(str(test_class), str(f"{datetime.datetime(2021, 2, 2, 0, 0)}"))
 
     # Test 3 - Not a date
     def test_incorrect_name(self):
@@ -972,4 +1259,4 @@ class TestSprintInfo(TestCase):
         self.assertEqual(test_class.sprint_day, "rint")
         self.assertEqual(test_class.sprint_id, sprint_id)
         self.assertEqual(test_class.sprint_start_date, datetime.datetime(2020, 1, 1, 0, 0))
-        self.assertEqual(str(test_class), str(datetime.datetime(2020, 1, 1, 0, 0)))
+        self.assertEqual(str(test_class), str(f"{datetime.datetime(2020, 1, 1, 0, 0)}"))
